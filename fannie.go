@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/invertedv/chutils"
+	"github.com/invertedv/fannie/collapse"
 	"github.com/invertedv/fannie/raw"
 	"log"
 	"os"
@@ -45,7 +46,12 @@ func main() {
 			log.Fatalln(e)
 		}
 	}()
-
+	start := time.Now()
+	if e := collapse.GroupBy("tmp.source", *table, *tmp, true, 12, con); e != nil {
+		log.Fatalln(e)
+	}
+	fmt.Println("elapsed time", time.Since(start))
+	os.Exit(0)
 	// holds the set of files to work through
 	fileList := make([]string, 0)
 
@@ -65,57 +71,22 @@ func main() {
 	}
 
 	sort.Strings(fileList)
-	start := time.Now()
+	start = time.Now()
 	createTable := *create == "Y" || *create == "y"
 	fmt.Println(createTable)
 	for ind, fileName := range fileList {
-		//		if e := joined.Load(fileList[k].Monthly, fileList[k].Static, *table, *tmp, createTable, *nConcur, con); e != nil {
-		//			log.Fatalln(e)
-		//		}
 		_ = ind
 		fullFile := *srcDir + fileName
 		tmpTable := *tmp + ".source"
 		if e := raw.LoadRaw(fullFile, tmpTable, true, *nConcur, con); e != nil {
 			log.Fatalln(e)
 		}
-		/*
-			f, err := os.Open(fullFile)
-			if err != nil {
-				log.Fatalln(err)
-			}
-			rdr := file.NewReader(fileName, '|', '\n', '"', 0, 0, 0, f, 6000000)
-			rdr.SetTableSpec(raw.Build())
-			rdr.Skip = 0
-			row, _, err := rdr.Read(1, true)
-			fmt.Println(len(row[0]), "length")
-			if err != nil {
-				log.Fatalln(err)
-			}
-			for ind, v := range row[0] {
-				nm := rdr.TableSpec().FieldDefs[ind].Name
-				fmt.Println(ind, nm, v)
-			}
-			fmt.Println(row)
-
-		*/
 		createTable = false
 		break
 
 		/*		fmt.Printf("Done with quarter %s. %d out of %d \n", k, ind+1, len(fileList))
-				r := s.NewReader("select lnId, monthly.upb from go.freddie limit 4", con)
-				if e := r.Init("lnId", chutils.MergeTree); e != nil {
-					log.Fatalln(e)
-				}
-				fmt.Println(r.CountLines())
-				row, _, err := r.Read(1, false)
-				if err != nil {
-					log.Fatalln(err)
-				}
-				fmt.Println(row)
-				x := row[0][1].([]float32)
-				fmt.Println(len(x))
 
-		*/
+		 */
 	}
 	fmt.Println("elapsed time", time.Since(start))
 }

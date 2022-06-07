@@ -507,9 +507,6 @@ func Build() *chutils.TableDef {
 		modMiss = strMiss
 		modLvl  = []string{"Y", "P", "N"}
 
-		miCanMiss = strMiss
-		miCanLvl  = []string{"Y", "M", "NA"}
-
 		zbMiss = strMiss
 		zbDef  = "00"
 		zbLvl  = []string{"01", "02", "03", "06", "09", "15", "16", "96", "97", "98", ""}
@@ -521,10 +518,12 @@ func Build() *chutils.TableDef {
 		fclDtMin, fclDtMax, fclDtMiss, fclDtDef     = minDt, nowDt, missDt, missDt
 		dispDtMin, dispDtMax, dispDtMiss, dispDtDef = minDt, nowDt, missDt, missDt
 
-		fclExpMin, fclExpMax, fclExpMiss, fclExpDef         = float32(0.0), float32(200000.0), float32(0.0), float32(0.0)
-		fclLExpMin, fclLExpMax, fclLExpMiss, fclLExpDef     = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
-		fclPExpMin, fclPExpMax, fclPExpMiss, fclPExpDef     = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
-		fclTaxesMin, fclTaxesMax, fclTaxesMiss, fclTaxesDef = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
+		fclExpMin, fclExpMax, fclExpMiss, fclExpDef                     = float32(0.0), float32(200000.0), float32(0.0), float32(0.0)
+		fclLExpMin, fclLExpMax, fclLExpMiss, fclLExpDef                 = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
+		fclPExpMin, fclPExpMax, fclPExpMiss, fclPExpDef                 = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
+		fclMExpMin, fclMExpMax, fclMExpMiss, fclMExpDef                 = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
+		fclTaxesMin, fclTaxesMax, fclTaxesMiss, fclTaxesDef             = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
+		fclWriteOffMin, fclWriteOffMax, fclWriteOffMiss, fclWriteOffDef = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
 
 		fclProMiMin, fclProMiMax, fclProMiMiss, fclProMiDef     = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
 		fclProNetMin, fclProNetMax, fclProNetMiss, fclProNetDef = float32(-2000000.0), float32(2000000.0), float32(-1.0), float32(0.0)
@@ -540,8 +539,8 @@ func Build() *chutils.TableDef {
 		servActMiss = strMiss
 		servActLvl  = []string{"Y", "N"}
 
-		programMiss = strMiss
-		programLvl  = []string{"Y", "N"}
+		programMiss, programDef = strMiss, "N"
+		programLvl              = []string{"Y", "N"}
 
 		reloMiss = strMiss
 		reloLvl  = []string{"Y", "N"}
@@ -552,17 +551,20 @@ func Build() *chutils.TableDef {
 		sConformMiss = strMiss
 		sConformLvl  = []string{"Y", "N"}
 
-		bapMiss = strMiss
-		bapLvl  = []string{"F", "R", "T", "O", "N", "7", "9"}
+		bapMiss, bapDef = strMiss, "7"
+		bapLvl          = []string{"F", "R", "T", "O", "N", "7", "9"}
 
 		hltvMiss = strMiss
 		hltvLvl  = []string{"Y", "N"}
 
-		reprchMwMiss = strMiss
-		reprchMwLvl  = []string{"Y", "N"}
+		reprchMwMiss, reprchMwDef = strMiss, "N"
+		reprchMwLvl               = []string{"Y", "N"}
 
-		altResMiss = strMiss
-		altResLvl  = []string{"P", "C", "D", "7", "9"}
+		altResMiss, altResDef = strMiss, "7"
+		altResLvl             = []string{"P", "C", "D", "7", "9"}
+
+		altResCntMin, altResCntMax, altResCntMiss, altResCntDef = int32(0), int32(100), int32(-1), int32(0)
+		totDefrlMin, totDefrlMax, totDefrlMiss, totDefrlDef     = float32(0.0), float32(200000.0), float32(-1.0), float32(0.0)
 	)
 
 	// field prepends a 0 for values under 10
@@ -977,11 +979,10 @@ func Build() *chutils.TableDef {
 
 	// Not in Freddie
 	fd = &chutils.FieldDef{
-		Name:        "miCan",
+		Name:        "unused36",
 		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 2},
-		Description: "mi Canceled: Y yes, M no, NA=never had mi , missing=" + miCanMiss,
-		Legal:       &chutils.LegalValues{Levels: miCanLvl},
-		Missing:     miCanMiss,
+		Description: "unused",
+		Legal:       &chutils.LegalValues{},
 	}
 	fds[42] = fd
 
@@ -1115,10 +1116,10 @@ func Build() *chutils.TableDef {
 	fd = &chutils.FieldDef{
 		Name:        "fclMExp",
 		ChSpec:      chutils.ChField{Base: chutils.ChFloat, Length: 32},
-		Description: "foreclosure misc expenses, missing=", // + fmt.Sprintf("%v", fclMExpMiss),
-		Legal:       &chutils.LegalValues{},                //LowLimit: fclMExpMin, HighLimit: fclMExpMax},
+		Description: "foreclosure misc expenses, missing=" + fmt.Sprintf("%v", fclMExpMiss),
+		Legal:       &chutils.LegalValues{LowLimit: fclMExpMin, HighLimit: fclMExpMax},
 		Missing:     fltMiss,
-		//		Default:     fclMExpDef,
+		Default:     fclMExpDef,
 	}
 	fds[56] = fd
 
@@ -1329,6 +1330,7 @@ func Build() *chutils.TableDef {
 		Description: "fannie program: Y (home ready) N (no program), missing=" + programMiss,
 		Legal:       &chutils.LegalValues{Levels: programLvl},
 		Missing:     programMiss,
+		Default:     programDef,
 	}
 	fds[78] = fd
 
@@ -1336,9 +1338,10 @@ func Build() *chutils.TableDef {
 	fd = &chutils.FieldDef{
 		Name:        "fclWriteOff",
 		ChSpec:      chutils.ChField{Base: chutils.ChFloat, Length: 32},
-		Description: "foreclosure principal writeoff, missing=",
-		Legal:       &chutils.LegalValues{},
-		Missing:     fltMiss,
+		Description: "foreclosure principal writeoff, missing=" + fmt.Sprintf("%v", fclWriteOffMiss),
+		Legal:       &chutils.LegalValues{LowLimit: fclWriteOffMin, HighLimit: fclWriteOffMax},
+		Missing:     fclWriteOffMiss,
+		Default:     fclWriteOffDef,
 	}
 	fds[79] = fd
 
@@ -1539,6 +1542,7 @@ func Build() *chutils.TableDef {
 		Description: "borrower assistant plan: F(forebearance), R(repayment), T(trial), O(Other), N(none), 7,9(NA) missing=" + bapMiss,
 		Legal:       &chutils.LegalValues{Levels: bapLvl},
 		Missing:     bapMiss,
+		Default:     bapDef,
 	}
 	fds[101] = fd
 
@@ -1565,7 +1569,8 @@ func Build() *chutils.TableDef {
 		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
 		Description: "repurchase make whole: Y, N missing=" + reprchMwMiss,
 		Legal:       &chutils.LegalValues{Levels: reprchMwLvl},
-		Missing:     hltvMiss,
+		Missing:     reprchMwMiss,
+		Default:     reprchMwDef,
 	}
 	fds[104] = fd
 
@@ -1576,6 +1581,7 @@ func Build() *chutils.TableDef {
 		Description: "DQ payment deferral: P(payment), C(Covid), D(disaster), 7/9 :NA missing=" + altResMiss,
 		Legal:       &chutils.LegalValues{Levels: altResLvl},
 		Missing:     altResMiss,
+		Default:     altResDef,
 	}
 	fds[105] = fd
 
@@ -1583,9 +1589,10 @@ func Build() *chutils.TableDef {
 	fd = &chutils.FieldDef{
 		Name:        "altResCnt",
 		ChSpec:      chutils.ChField{Base: chutils.ChInt, Length: 32},
-		Description: "# of alternate resolutions (deferrals), missing=",
-		Legal:       &chutils.LegalValues{},
-		Missing:     int32(-1),
+		Description: "# of alternate resolutions (deferrals), missing=" + fmt.Sprintf("%v", altResCntMiss),
+		Legal:       &chutils.LegalValues{LowLimit: altResCntMin, HighLimit: altResCntMax},
+		Missing:     altResCntMiss,
+		Default:     altResCntDef,
 	}
 	fds[106] = fd
 
@@ -1593,9 +1600,10 @@ func Build() *chutils.TableDef {
 	fd = &chutils.FieldDef{
 		Name:        "totDefrl",
 		ChSpec:      chutils.ChField{Base: chutils.ChFloat, Length: 32},
-		Description: "total amount deferred, missing=",
-		Legal:       &chutils.LegalValues{},
-		Missing:     fltMiss,
+		Description: "total amount deferred, missing=" + fmt.Sprintf("%v", totDefrlMiss),
+		Legal:       &chutils.LegalValues{LowLimit: totDefrlMin, HighLimit: totDefrlMax},
+		Missing:     totDefrlMiss,
+		Default:     totDefrlDef,
 	}
 	fds[107] = fd
 	// ============================
@@ -1613,5 +1621,5 @@ func Build() *chutils.TableDef {
 	//   dqDis
 	//   modCLoss
 
-	return chutils.NewTableDef("lnId", chutils.MergeTree, fds)
+	return chutils.NewTableDef("lnId, month", chutils.MergeTree, fds)
 }
