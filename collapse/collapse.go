@@ -1,14 +1,18 @@
 package collapse
 
+//TODO lower case names
 import (
 	"fmt"
 	"github.com/invertedv/chutils"
 	"github.com/invertedv/chutils/nested"
 	s "github.com/invertedv/chutils/sql"
+	"github.com/invertedv/fannie/raw"
+	"reflect"
 	"strings"
+	"time"
 )
 
-// Rdrs generates slices of Readers of len nRdrs. The data represented by rdr0 is equally divided
+// srdrs generates slices of Readers of len nRdrs. The data represented by rdr0 is equally divided
 // amongst the Readers in the slice.
 func srdrs(nRdrs int, qry string, rowTable string, con *chutils.Connect) (r []chutils.Input, err error) {
 
@@ -70,14 +74,15 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 		return
 	}
 
+	// build the extra fields and populate the Description field of rdrs[0].TableSpec
 	newCalcs := make([]nested.NewCalcFn, 0)
-	newCalcs = append(newCalcs, dtiField)
+	newCalcs = append(newCalcs, dtiField, channelField, sellerField, rateField, opbField, termField, origDtField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
 	rdrsn := make([]chutils.Input, 0)
 	for j, r := range rdrs {
 
-		rn, e := nested.NewReader(r, xtraFields(), newCalcs)
+		rn, e := nested.NewReader(r, xtraFields(r.TableSpec()), newCalcs)
 
 		if e != nil {
 			return e
@@ -87,6 +92,12 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 				return e
 			}
 			if create {
+				// copy over the descriptions
+				for _, fd := range rn.TableSpec().FieldDefs {
+					if _, fdRaw, e := raw.TableDef.Get(fd.Name); e == nil {
+						fd.Description = fdRaw.Description
+					}
+				}
 				if err = rn.TableSpec().Create(con, table); err != nil {
 					return err
 				}
@@ -100,32 +111,171 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 		return
 	}
 
-	if e := chutils.Concur(nConcur, rdrsn, wrtrs, 0); e != nil {
+	if e := chutils.Concur(nConcur, rdrsn, wrtrs, 1000); e != nil {
 		return e
 	}
 	return nil
 }
 
-// xtraFields defines additional fields for the nested reader
-func xtraFields() (fds []*chutils.FieldDef) {
-	vfd := &chutils.FieldDef{
-		Name:        "dti",
-		ChSpec:      chutils.ChField{Base: chutils.ChInt, Length: 32},
-		Description: "dti",
-		Legal:       chutils.NewLegalValues(),
-		Missing:     int32(1000),
+// xtraFields defines additional fields for the nested reader.
+// baseTable is the TableDef for the reader that will issue the create table
+func xtraFields(baseTable *chutils.TableDef) (fds []*chutils.FieldDef) {
+	// get the info for these fields from the raw table
+	flds := []string{"dti", "channel", "seller", "rate", "opb", "term", "origDt"}
+	for _, f := range flds {
+		if _, fd, err := raw.TableDef.Get(f); err == nil {
+			fds = append(fds, fd)
+		}
 	}
-	fds = []*chutils.FieldDef{vfd}
+	// drop the arrays from the query
+	for _, f := range flds {
+		if _, fd, err := baseTable.Get(f + "Array"); err == nil {
+			fd.Drop = true
+		}
+	}
 	return
 }
 
-func dtiField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
-	ind, _, err := td.Get("dtiArray")
+// metric finds the max, last or average of slice x of type int or float
+// fn='a': avg, fn='m': max, fn='l': last
+func metric(x any, missing any, fn rune) interface{} {
+
+	var missDt, maxDt time.Time
+	var isDt bool
+
+	arr := reflect.ValueOf(x)
+	if arr.Kind() != reflect.Slice {
+		return missing
+	}
+	miss := reflect.ValueOf(missing)
+	if missDt, isDt = missing.(time.Time); isDt {
+		maxDt = missDt
+	}
+	knd := arr.Index(0).Kind()
+
+	var metric float64 = 0.0
+	cnt := 0
+	for j := 0; j < arr.Len(); j++ {
+		var x float64
+		var dt time.Time
+		val := arr.Index(j)
+
+		if val != miss {
+			switch knd {
+			case reflect.Int32:
+				x = float64(val.Int())
+			case reflect.Float32:
+				x = val.Float()
+			case reflect.Struct:
+				dt = val.Interface().(time.Time)
+			}
+			switch fn {
+			case 'a':
+				metric += x
+			case 'm':
+				if isDt {
+					if dt.After(maxDt) {
+						maxDt = dt
+					}
+				} else {
+					if x > metric {
+						metric = x
+					}
+				}
+			case 'l':
+				if isDt {
+					maxDt = dt
+				} else {
+					metric = x
+				}
+			}
+			cnt++
+		}
+	}
+	if cnt > 0 {
+		switch fn {
+		case 'a':
+			return float32(metric) / float32(cnt)
+		case 'm', 'l':
+			if isDt {
+				return maxDt
+			}
+			return float32(metric)
+		}
+	}
+	return missing
+}
+
+// mode finds the most frequent non-missing value in cls
+func mode(cls []string, missing string) string {
+	cnts := make(map[string]int)
+	any := false
+	for _, c := range cls {
+		if c != missing {
+			any = true
+			cnts[c]++
+		}
+	}
+	if !any {
+		return missing
+	}
+	maxCnt := 0
+	maxCls := ""
+	for k, v := range cnts {
+		if v > maxCnt {
+			maxCnt = v
+			maxCls = k
+		}
+	}
+	return maxCls
+}
+
+func compress(arrayName string, avgName string, td *chutils.TableDef, data chutils.Row, fn rune) (interface{}, error) {
+	ind, _, err := td.Get(arrayName)
 	if err != nil {
 		return nil, err
 	}
-	dti := data[ind].([]int32)[0]
-	return dti, nil
+	_, fd, err := td.Get(avgName)
+	if err != nil {
+		return nil, err
+	}
+	switch fd.ChSpec.Base {
+	case chutils.ChInt, chutils.ChFloat, chutils.ChDate:
+		return metric(data[ind], fd.Missing, fn), nil
+	case chutils.ChString, chutils.ChFixedString:
+		arr, missing := data[ind].([]string), fd.Missing.(string)
+		m := mode(arr, missing)
+		return m, nil
+	}
+	return nil, nil
+}
+
+func dtiField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("dtiArray", "dti", td, data, 'a')
+}
+
+func rateField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("rateArray", "rate", td, data, 'a')
+}
+
+func opbField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("opbArray", "opb", td, data, 'a')
+}
+
+func termField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("termArray", "term", td, data, 'a')
+}
+
+func origDtField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("origDtArray", "origDt", td, data, 'm')
+}
+
+func channelField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("channelArray", "channel", td, data, 'a')
+}
+
+func sellerField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("sellerArray", "seller", td, data, 'd')
 }
 
 // qryRows creates a table that maps lnId to a row number. This is needed to divvy up the table
@@ -147,9 +297,30 @@ SELECT
 FROM (
 SELECT
   lnId,
+  groupArray(month) AS month,
+  groupArray(upb) AS upb,
+  groupArray(dq) AS dq,
+  groupArray(lower(servicer)) AS servicer,
+  groupArray(curRate) AS curRate,
+  groupArray(age) AS age,
+  groupArray(rTermLgl) AS rTermLgl,
+  groupArray(rTermAct) AS rTermAct,
+  groupArray(dqStat) AS dqStat,
+  groupArray(mod) AS mod,
+  groupArray(zb) AS zb,
+  groupArray(ioRem) AS ioRem,
+  groupArray(bap) AS bap,
+  groupArray(program) AS program,
+//  groupArray() AS Array,
+
+
+  groupArray(channel) AS channelArray,
+  groupArray(lower(seller)) AS sellerArray,
   groupArray(dti) AS dtiArray,
-  groupArray(month) AS monthArray,
-  groupArray(upb) AS upbArray
+  groupArray(rate) AS rateArray,
+  groupArray(opb) AS opbArray,
+  groupArray(term) AS termArray,
+  groupArray(origDt) AS origDtArray
 FROM 
   sourceTable
 GROUP BY lnId) AS a
@@ -157,4 +328,5 @@ JOIN
   rowTable AS r
 ON
   a.lnId = r.lnId
+
 `

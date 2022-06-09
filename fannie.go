@@ -24,8 +24,8 @@ func main() {
 	table := flag.String("table", "", "string")
 	tmp := flag.String("tmp", "", "string")
 	nConcur := flag.Int("concur", 1, "int")
-	max_memory := flag.Int64("memory", 40000000000, "int64")
-	max_groupby := flag.Int64("groupby", 20000000000, "int64")
+	max_memory := flag.Int64("memory", 8000000000, "int64")
+	max_groupby := flag.Int64("groupby", 4000000000, "int64")
 
 	flag.Parse()
 	_, _, _ = table, tmp, nConcur

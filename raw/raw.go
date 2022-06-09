@@ -15,6 +15,16 @@ import (
 // it (e.g. Description)
 var TableDef *chutils.TableDef
 
+func init() {
+	TableDef = build()
+	fds := TableDef.FieldDefs
+	next := len(fds)
+	for _, fd := range xtraFields() {
+		fds[next] = fd
+		next++
+	}
+}
+
 func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chutils.Connect) (err error) {
 
 	fileName = sourceFile
@@ -32,7 +42,7 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 		}
 	}()
 	// rdr is the base reader the slice of readers is based on
-	rdr.SetTableSpec(Build())
+	rdr.SetTableSpec(build())
 
 	// build slice of readers
 	rdrs, err := file.Rdrs(rdr, nConcur)
@@ -69,7 +79,7 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 		}
 		rdrsn = append(rdrsn, rn)
 	}
-	TableDef = rdrsn[0].TableSpec()
+	//	TableDef = rdrsn[0].TableSpec()
 
 	err = chutils.Concur(12, rdrsn, wrtrs, 400000)
 	return
@@ -230,7 +240,7 @@ func pvField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, valida
 }
 
 // build builds the TableDef for the static field files.
-func Build() *chutils.TableDef {
+func build() *chutils.TableDef {
 	var (
 		// date ranges & missing value
 		minDt  = time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -247,9 +257,8 @@ func Build() *chutils.TableDef {
 		channelMiss                   = strMiss
 		channelLvl                    = []string{"B", "R", "C"} // freddie as T as well
 
-		sellerMiss    = "unknown"
-		servicerMiss  = "unknown"
-		mServicerMiss = "unknown"
+		sellerMiss   = "unknown"
+		servicerMiss = "unknown"
 
 		rateMin, rateMax, rateMiss          = float32(0.0), float32(15.0), float32(-1.0)
 		curRateMin, curRateMax, curRateMiss = float32(0.0), float32(15.0), float32(-1.0)
@@ -585,6 +594,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[0] = fd
 
@@ -638,12 +648,11 @@ func Build() *chutils.TableDef {
 
 	// not in Freddie
 	fd = &chutils.FieldDef{
-		Name:        "mServicer",
+		Name:        "unused37",
 		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
-		Description: "name of master servicer, missing=" + mServicerMiss,
+		Description: "unused",
 		Legal:       &chutils.LegalValues{},
-		Missing:     mServicerMiss,
-		Default:     mServicerMiss,
+		Drop:        true,
 	}
 	fds[6] = fd
 
@@ -680,6 +689,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[10] = fd
 
@@ -983,6 +993,7 @@ func Build() *chutils.TableDef {
 		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 2},
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
+		Drop:        true,
 	}
 	fds[42] = fd
 
@@ -1022,6 +1033,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[46] = fd
 
@@ -1031,6 +1043,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[47] = fd
 
@@ -1049,6 +1062,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[49] = fd
 
@@ -1202,6 +1216,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[64] = fd
 
@@ -1211,6 +1226,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[65] = fd
 
@@ -1220,6 +1236,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[66] = fd
 
@@ -1229,6 +1246,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[67] = fd
 
@@ -1238,6 +1256,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[68] = fd
 
@@ -1247,6 +1266,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[69] = fd
 
@@ -1256,6 +1276,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[70] = fd
 
@@ -1265,6 +1286,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[71] = fd
 
@@ -1293,6 +1315,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[74] = fd
 
@@ -1302,6 +1325,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[75] = fd
 
@@ -1311,6 +1335,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[76] = fd
 
@@ -1320,6 +1345,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[77] = fd
 
@@ -1360,6 +1386,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[81] = fd
 
@@ -1369,6 +1396,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[82] = fd
 
@@ -1378,6 +1406,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[83] = fd
 
@@ -1387,6 +1416,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[84] = fd
 
@@ -1416,6 +1446,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[87] = fd
 
@@ -1425,6 +1456,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[88] = fd
 
@@ -1434,6 +1466,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[89] = fd
 
@@ -1443,6 +1476,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[90] = fd
 
@@ -1452,6 +1486,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[91] = fd
 
@@ -1461,6 +1496,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[92] = fd
 
@@ -1470,6 +1506,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[93] = fd
 
@@ -1479,6 +1516,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[94] = fd
 
@@ -1488,6 +1526,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[95] = fd
 
@@ -1497,6 +1536,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[96] = fd
 
@@ -1506,6 +1546,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[97] = fd
 
@@ -1515,6 +1556,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[98] = fd
 
@@ -1524,6 +1566,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[99] = fd
 
@@ -1533,6 +1576,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[100] = fd
 
@@ -1561,6 +1605,7 @@ func Build() *chutils.TableDef {
 		Description: "unused",
 		Legal:       &chutils.LegalValues{},
 		Missing:     strMiss,
+		Drop:        true,
 	}
 	fds[103] = fd
 
