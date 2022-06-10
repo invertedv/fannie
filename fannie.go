@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 	start := time.Now()
-	if e := collapse.GroupBy("tmp.source", *table, *tmp, true, 12, con); e != nil {
+	if e := collapse.GroupBy("tmp.source", *table, *tmp, true, con); e != nil {
 		log.Fatalln(e)
 	}
 	fmt.Println("elapsed time", time.Since(start))
