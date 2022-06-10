@@ -1,6 +1,6 @@
 package collapse
 
-//TODO lower case names
+//TODO add ageFpDt
 import (
 	"fmt"
 	"github.com/invertedv/chutils"
@@ -26,15 +26,15 @@ func srdrs(nRdrs int, qry string, rowTable string, con *chutils.Connect) (r []ch
 	for rows.Next() {
 		rows.Scan(&maxRow)
 	}
-	nper := (maxRow + 1) / nRdrs
+	nper := maxRow / nRdrs
 	start := 0
 	for ind := 0; ind < nRdrs; ind++ {
 		var qryt string
 		np := start + nper - 1
 		if ind < nRdrs-1 {
-			qryt = qry + fmt.Sprintf(" WHERE row >= %v AND row <= %v ", start, np)
+			qryt = strings.Replace(qry, "<where>", fmt.Sprintf(" WHERE row >= %v AND row <= %v ", start, np), 1) //qry + fmt.Sprintf(" WHERE row >= %v AND row <= %v ", start, np)
 		} else {
-			qryt = qry + fmt.Sprintf(" WHERE row >= %v ", start)
+			qryt = strings.Replace(qry, "<where>", fmt.Sprintf(" WHERE row >= %v ", start), 1) //qry + fmt.Sprintf(" WHERE row >= %v ", start)
 
 		}
 		x := s.NewReader(qryt, con)
@@ -49,6 +49,7 @@ func srdrs(nRdrs int, qry string, rowTable string, con *chutils.Connect) (r []ch
 
 func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcur int, con *chutils.Connect) (err error) {
 	// build rowTable -- generates a row number for each lnId
+	fmt.Println("start time", time.Now())
 	rowTable := fmt.Sprintf("%s.rows", tmpDb)
 	qR := strings.Replace(qryRows, "sourceTable", sourceTable, 1)
 	rdrRow := s.NewReader(qR, con)
@@ -76,13 +77,19 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 
 	// build the extra fields and populate the Description field of rdrs[0].TableSpec
 	newCalcs := make([]nested.NewCalcFn, 0)
-	newCalcs = append(newCalcs, dtiField, channelField, sellerField, rateField, opbField, termField, origDtField)
+	newCalcs = append(newCalcs, dtiField, channelField, sellerField, rateField, opbField, termField, origDtField,
+		fpDtField, ltvField, cltvField, numBorrField, ficoField, coFicoField, firstTimeField, purposeField,
+		propTypeField, unitsField, occField, stateField, msaField, zip3Field, miField, amTypeField, pPenField,
+		ioField, ioDtField, zbDtField, zbUpbField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
 	rdrsn := make([]chutils.Input, 0)
 	for j, r := range rdrs {
 
 		rn, e := nested.NewReader(r, xtraFields(r.TableSpec()), newCalcs)
+		if e := rn.TableSpec().Nest("monthly", "month", "matDt"); e != nil {
+			return e
+		}
 
 		if e != nil {
 			return e
@@ -111,7 +118,7 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 		return
 	}
 
-	if e := chutils.Concur(nConcur, rdrsn, wrtrs, 1000); e != nil {
+	if e := chutils.Concur(nConcur, rdrsn, wrtrs, 10000); e != nil {
 		return e
 	}
 	return nil
@@ -121,7 +128,9 @@ func GroupBy(sourceTable string, table string, tmpDb string, create bool, nConcu
 // baseTable is the TableDef for the reader that will issue the create table
 func xtraFields(baseTable *chutils.TableDef) (fds []*chutils.FieldDef) {
 	// get the info for these fields from the raw table
-	flds := []string{"dti", "channel", "seller", "rate", "opb", "term", "origDt"}
+	flds := []string{"dti", "channel", "seller", "rate", "opb", "term", "origDt", "fpDt", "ltv", "cltv", "numBorr",
+		"fico", "coFico", "firstTime", "purpose", "propType", "units", "occ", "state", "msa", "zip3", "mi",
+		"amType", "pPen", "io", "ioDt", "zbDt", "zbUpb"}
 	for _, f := range flds {
 		if _, fd, err := raw.TableDef.Get(f); err == nil {
 			fds = append(fds, fd)
@@ -270,8 +279,92 @@ func origDtField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, va
 	return compress("origDtArray", "origDt", td, data, 'm')
 }
 
+func fpDtField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("fpDtArray", "fpDt", td, data, 'm')
+}
+
+func ltvField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("ltvArray", "ltv", td, data, 'a')
+}
+
+func cltvField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("cltvArray", "cltv", td, data, 'a')
+}
+
+func numBorrField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("numBorrArray", "numBorr", td, data, 'a')
+}
+
+func ficoField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("ficoArray", "fico", td, data, 'a')
+}
+
+func coFicoField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("coFicoArray", "coFico", td, data, 'a')
+}
+
+func firstTimeField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("firstTimeArray", "firstTime", td, data, 'd')
+}
+
+func purposeField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("purposeArray", "purpose", td, data, 'd')
+}
+
+func propTypeField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("propTypeArray", "propType", td, data, 'd')
+}
+
+func unitsField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("unitsArray", "units", td, data, 'a')
+}
+
+func occField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("occArray", "occ", td, data, 'd')
+}
+
+func stateField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("stateArray", "state", td, data, 'd')
+}
+
+func msaField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("msaArray", "msa", td, data, 'd')
+}
+
+func zip3Field(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("zip3Array", "zip3", td, data, 'd')
+}
+
+func miField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("miArray", "mi", td, data, 'a')
+}
+
+func amTypeField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("amTypeArray", "amType", td, data, 'd')
+}
+
+func pPenField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("pPenArray", "pPen", td, data, 'd')
+}
+
+func ioField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("ioArray", "io", td, data, 'd')
+}
+
+func ioDtField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("ioDtArray", "ioDt", td, data, 'm')
+}
+
+func zbDtField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("zbDtArray", "zbDt", td, data, 'm')
+}
+
+func zbUpbField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return compress("zbUpbArray", "zbUpb", td, data, 'm')
+}
+
 func channelField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
-	return compress("channelArray", "channel", td, data, 'a')
+	return compress("channelArray", "channel", td, data, 'd')
 }
 
 func sellerField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
@@ -290,7 +383,7 @@ GROUP BY lnId  )
 SELECT * FROM r
 `
 
-const qry = `
+const qry1 = `
 SELECT
   a.*,
   r.row
@@ -298,10 +391,10 @@ FROM (
 SELECT
   lnId,
   groupArray(month) AS month,
-  groupArray(upb) AS upb,
+  groupArray(upb * 1.0) AS upb,
   groupArray(dq) AS dq,
   groupArray(lower(servicer)) AS servicer,
-  groupArray(curRate) AS curRate,
+  groupArray(curRate * 1.0) AS curRate,
   groupArray(age) AS age,
   groupArray(rTermLgl) AS rTermLgl,
   groupArray(rTermAct) AS rTermAct,
@@ -311,8 +404,7 @@ SELECT
   groupArray(ioRem) AS ioRem,
   groupArray(bap) AS bap,
   groupArray(program) AS program,
-//  groupArray() AS Array,
-
+  groupArray(matDt) AS matDt,
 
   groupArray(channel) AS channelArray,
   groupArray(lower(seller)) AS sellerArray,
@@ -320,13 +412,93 @@ SELECT
   groupArray(rate) AS rateArray,
   groupArray(opb) AS opbArray,
   groupArray(term) AS termArray,
-  groupArray(origDt) AS origDtArray
-FROM 
-  sourceTable
+  groupArray(origDt) AS origDtArray,
+  groupArray(fpDt) AS fpDtArray,
+  groupArray(ltv) AS ltvArray,
+  groupArray(cltv) AS cltvArray,
+  groupArray(numBorr) AS numBorrArray,
+  groupArray(fico) AS ficoArray,
+  groupArray(coFico) AS coFicoArray,
+  groupArray(firstTime) AS firstTimeArray,
+  groupArray(purpose) AS purposeArray,
+  groupArray(propType) AS propTypeArray,
+  groupArray(units) AS unitsArray,
+  groupArray(occ) AS occArray,
+  groupArray(state) AS stateArray,
+  groupArray(msa) AS msaArray,
+  groupArray(zip3) AS zip3Array,
+  groupArray(mi) AS miArray,
+  groupArray(amType) AS amTypeArray,
+  groupArray(pPen) AS pPenArray,
+  groupArray(io) AS ioArray,
+  groupArray(ioDt) AS ioDtArray,
+  groupArray(zbDt) AS zbDtArray,
+  groupArray(zbUpb) AS zbUpbArray
+FROM sourceTable
 GROUP BY lnId) AS a
 JOIN
-  rowTable AS r
+  (SELECT * FROM rowTable <where>) AS r
 ON
   a.lnId = r.lnId
+`
+const qry = `
+WITH jn AS (
+SELECT
+  a.*
+FROM 
+  sourceTable AS a
+JOIN
+  (SELECT * FROM rowTable <where>) AS r
+ON
+  a.lnId = r.lnId
+ORDER BY lnId, month)
+SELECT
+  lnId,
+  groupArray(month) AS month,
+  groupArray(upb * 1.0) AS upb,
+  groupArray(dq) AS dq,
+  groupArray(lower(servicer)) AS servicer,
+  groupArray(curRate * 1.0) AS curRate,
+  groupArray(age) AS age,
+  groupArray(rTermLgl) AS rTermLgl,
+  groupArray(rTermAct) AS rTermAct,
+  groupArray(dqStat) AS dqStat,
+  groupArray(mod) AS mod,
+  groupArray(zb) AS zb,
+  groupArray(ioRem) AS ioRem,
+  groupArray(bap) AS bap,
+  groupArray(program) AS program,
+  groupArray(matDt) AS matDt,
 
+  groupArray(channel) AS channelArray,
+  groupArray(lower(seller)) AS sellerArray,
+  groupArray(dti) AS dtiArray,
+  groupArray(rate) AS rateArray,
+  groupArray(opb) AS opbArray,
+  groupArray(term) AS termArray,
+  groupArray(origDt) AS origDtArray,
+  groupArray(fpDt) AS fpDtArray,
+  groupArray(ltv) AS ltvArray,
+  groupArray(cltv) AS cltvArray,
+  groupArray(numBorr) AS numBorrArray,
+  groupArray(fico) AS ficoArray,
+  groupArray(coFico) AS coFicoArray,
+  groupArray(firstTime) AS firstTimeArray,
+  groupArray(purpose) AS purposeArray,
+  groupArray(propType) AS propTypeArray,
+  groupArray(units) AS unitsArray,
+  groupArray(occ) AS occArray,
+  groupArray(state) AS stateArray,
+  groupArray(msa) AS msaArray,
+  groupArray(zip3) AS zip3Array,
+  groupArray(mi) AS miArray,
+  groupArray(amType) AS amTypeArray,
+  groupArray(pPen) AS pPenArray,
+  groupArray(io) AS ioArray,
+  groupArray(ioDt) AS ioDtArray,
+  groupArray(zbDt) AS zbDtArray,
+  groupArray(zbUpb) AS zbUpbArray
+FROM 
+  jn
+GROUP BY lnId
 `
