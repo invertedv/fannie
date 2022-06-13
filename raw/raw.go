@@ -8,6 +8,7 @@ import (
 	s "github.com/invertedv/chutils/sql"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -57,7 +58,7 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 	}
 
 	newCalcs := make([]nested.NewCalcFn, 0)
-	newCalcs = append(newCalcs, vField, fField, dqField, vintField, pvField)
+	newCalcs = append(newCalcs, vField, fField, dqField, vintField, pvField, stdField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
 	rdrsn := make([]chutils.Input, 0)
@@ -93,15 +94,13 @@ func xtraFields() (fds []*chutils.FieldDef) {
 		Description: "validation results for each field: 0=pass, 1=fail",
 		Legal:       chutils.NewLegalValues(),
 		Missing:     "!",
-		Width:       0,
 	}
 	ffd := &chutils.FieldDef{
 		Name:        "file",
 		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
-		Description: "file monthly data loaded from",
+		Description: "source file",
 		Legal:       chutils.NewLegalValues(),
 		Missing:     "!",
-		Width:       0,
 	}
 	dqfd := &chutils.FieldDef{
 		Name:        "dq",
@@ -109,15 +108,13 @@ func xtraFields() (fds []*chutils.FieldDef) {
 		Description: "months delinquent",
 		Legal:       &chutils.LegalValues{LowLimit: int32(0), HighLimit: int32(999)},
 		Missing:     int32(-1),
-		Width:       0,
 	}
 	vintfd := &chutils.FieldDef{
 		Name:        "vintage",
-		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 6, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
 		Description: "vintage (from fpDt)",
 		Legal:       chutils.NewLegalValues(),
-		Missing:     "!",
-		Width:       0,
+		Missing:     "XXXXQX",
 	}
 	pvfd := &chutils.FieldDef{
 		Name:        "propVal",
@@ -125,9 +122,15 @@ func xtraFields() (fds []*chutils.FieldDef) {
 		Description: "property value at origination",
 		Legal:       &chutils.LegalValues{LowLimit: float32(1000.0), HighLimit: float32(5000000.0), Levels: nil},
 		Missing:     float32(-1.0),
-		Width:       0,
 	}
-	fds = []*chutils.FieldDef{vfd, ffd, dqfd, vintfd, pvfd}
+	stdfd := &chutils.FieldDef{
+		Name:        "standard",
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
+		Description: "standard u/w process loan: Y, N",
+		Legal:       chutils.NewLegalValues(),
+		Missing:     "X",
+	}
+	fds = []*chutils.FieldDef{vfd, ffd, dqfd, vintfd, pvfd, stdfd}
 	return
 }
 
@@ -192,6 +195,15 @@ func fField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validat
 	return fileName, nil
 }
 
+// fField returns the name of the file we're loading
+func stdField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	val := "Y"
+	if strings.Contains(fileName, "EX") {
+		val = "N"
+	}
+	return val, nil
+}
+
 // dqField returns the delinquency level as an integer
 func dqField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
 	ind, _, err := td.Get("dqStat")
@@ -212,6 +224,12 @@ func vintField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, vali
 		return nil, err
 	}
 	fpd := data[ind].(time.Time)
+	if fpd.Year() == 1970 {
+		if ind1, _, err := td.Get("vintage"); err == nil {
+			return td.FieldDefs[ind1].Missing, nil
+		}
+		return "ERROR!", nil
+	}
 	var qtr = int((fpd.Month()-1)/3 + 1)
 	vintage := fmt.Sprintf("%dQ%d", fpd.Year(), qtr)
 	return vintage, nil
@@ -413,7 +431,7 @@ func build() *chutils.TableDef {
 			"48540", "48580", "48620", "48660", "48700", "48780", "48820", "48900", "48940", "48980",
 			"49020", "49060", "49080", "49100", "49180", "49220", "49260", "49300", "49340", "49380"}
 
-		zip3Miss = "000"
+		zip3Miss = "XXX"
 		zip3Lvl  = []string{"005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016",
 			"017", "018", "019", "020", "021", "022", "023", "024", "025", "026", "027", "028",
 			"029", "030", "031", "032", "033", "034", "035", "036", "037", "038", "039", "040",
@@ -1667,4 +1685,53 @@ func build() *chutils.TableDef {
 	//   modCLoss
 
 	return chutils.NewTableDef("lnId, month", chutils.MergeTree, fds)
+}
+
+// LoadHarpMap loads the mapping of non-HARP loans that refinanced into HARP loans.
+func LoadHarpMap(sourceFile string, table string, con *chutils.Connect) (err error) {
+	f, err := os.Open(sourceFile)
+	if err != nil {
+		return err
+	}
+	rdr := file.NewReader(fileName, ',', '\n', '"', 0, 0, 0, f, 6000000)
+	rdr.Skip = 0
+	defer func() {
+		// don't throw an error if we already have one
+		if e := rdr.Close(); e != nil && err == nil {
+			err = e
+		}
+	}()
+	// rdr is the base reader the slice of readers is based on
+
+	fds := make(map[int]*chutils.FieldDef)
+
+	fd := &chutils.FieldDef{
+		Name:        "oldLnId",
+		ChSpec:      chutils.ChField{Base: chutils.ChString},
+		Description: "original (pre-HARP) lnId",
+		Legal:       &chutils.LegalValues{},
+	}
+	fds[0] = fd
+
+	fd = &chutils.FieldDef{
+		Name:        "harpLnId",
+		ChSpec:      chutils.ChField{Base: chutils.ChString},
+		Description: "HARP lnId",
+		Legal:       &chutils.LegalValues{},
+	}
+	fds[1] = fd
+	td := chutils.NewTableDef("oldLnId", chutils.MergeTree, fds)
+	rdr.SetTableSpec(td)
+	if e := rdr.TableSpec().Check(); e != nil {
+		return e
+	}
+	if e := rdr.TableSpec().Create(con, table); e != nil {
+		return e
+	}
+	wrtr := s.NewWriter(table, con)
+	if e := chutils.Export(rdr, wrtr, 0); e != nil {
+		return e
+	}
+	return nil
+
 }
