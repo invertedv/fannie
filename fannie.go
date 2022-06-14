@@ -29,7 +29,9 @@ func main() {
 	max_groupby := flag.Int64("groupby", 20000000000, "int64")
 
 	flag.Parse()
-	_, _, _ = table, tmp, nConcur
+	createTable := *create == "Y" || *create == "y"
+
+	//	_, _, _ = table, tmp, nConcur
 	// add trailing slash, if needed
 	if (*srcDir)[len(*srcDir)-1] != '/' {
 		*srcDir += "/"
@@ -68,33 +70,39 @@ func main() {
 	if len(fileList) == 0 {
 		log.Fatalln(fmt.Errorf("%s", "diredtory has no .csv files"))
 	}
-	if !gotMap {
-		log.Fatalln(fmt.Errorf("did not find Loan_Mapping.txt"))
-	}
-	if e := raw.LoadHarpMap(*srcDir+"Loan_Mapping.txt", *mapTable, con); e != nil {
-		log.Fatalln(e)
+	if gotMap && createTable {
+		if e := raw.LoadHarpMap(*srcDir+"Loan_Mapping.txt", *mapTable, con); e != nil {
+			log.Fatalln(e)
+		}
 	}
 
 	sort.Strings(fileList)
-	createTable := *create == "Y" || *create == "y"
-	start := time.Now()
+	step1Time := 0.0
+	step2Time := 0.0
 	for ind, fileName := range fileList {
 		_ = ind
 		fullFile := *srcDir + fileName
 		tmpTable := *tmp + ".source"
 		s := time.Now()
-		//_, _ = fullFile, tmpTable
 		if e := raw.LoadRaw(fullFile, tmpTable, true, *nConcur, con); e != nil {
 			log.Fatalln(e)
 		}
+		step1 := time.Since(s)
+		s = time.Now()
 		if e := collapse.GroupBy("tmp.source", *table, *mapTable, createTable, con); e != nil {
 			log.Fatalln(e)
 		}
-		fmt.Println("elapsed time", time.Since(s))
+		step2 := time.Since(s)
 		createTable = false
-		fmt.Printf("Done with %s. %d out of %d , elapsed time: %v\n", fileName, ind+1, len(fileList), time.Since(s))
-		//		break
+		fmt.Printf("Done with %s. %d out of %d ,times: %v, %v\n", fileName, ind+1, len(fileList), step1, step2)
+		step1Time += step1.Seconds()
+		step2Time += step2.Seconds()
+		break
 
 	}
-	fmt.Println("elapsed time", time.Since(start))
+	step1Time /= 3600.0
+	step2Time /= 3600.0
+	fmt.Printf("step1 time: %0.2f step2 time: %0.2f hours, total: %0.2f", step1Time, step2Time, step1Time+step2Time)
 }
+
+//TODO: drop tmp.source when done

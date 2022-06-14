@@ -8,19 +8,20 @@ import (
 	s "github.com/invertedv/chutils/sql"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
-// TableDef is TableDef for the source table.  It is exported as other packages (e.g. joined) may need fields from
-// it (e.g. Description)
+// TableDef is TableDef for the source table.  It is exported as other packages (e.g. collapse) that need
+// details of these fields
 var TableDef *chutils.TableDef
+var Excl bool
 
 func init() {
-	TableDef = build()
+	// builds the TableDef for the raw files -- used by collapse.go
+	TableDef = build(true)
 	fds := TableDef.FieldDefs
 	next := len(fds)
-	for _, fd := range xtraFields() {
+	for _, fd := range xtraFields(false) {
 		fds[next] = fd
 		next++
 	}
@@ -43,7 +44,16 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 		}
 	}()
 	// rdr is the base reader the slice of readers is based on
-	rdr.SetTableSpec(build())
+	Excl = false
+	rdr.SetTableSpec(build(Excl))
+
+	// if this is an exclusion file, then this will produce an error
+	_, _, e := rdr.Read(1, true)
+	if e != nil {
+		Excl = true
+		rdr.SetTableSpec(build(Excl))
+	}
+	rdr.Reset()
 
 	// build slice of readers
 	rdrs, err := file.Rdrs(rdr, nConcur)
@@ -58,13 +68,16 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 	}
 
 	newCalcs := make([]nested.NewCalcFn, 0)
+	if !Excl {
+		newCalcs = append(newCalcs, nsDocField, nsUwField, gGuarField, negAmField)
+	}
 	newCalcs = append(newCalcs, vField, fField, dqField, vintField, pvField, stdField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
 	rdrsn := make([]chutils.Input, 0)
 	for j, r := range rdrs {
 
-		rn, e := nested.NewReader(r, xtraFields(), newCalcs)
+		rn, e := nested.NewReader(r, xtraFields(Excl), newCalcs)
 		if e != nil {
 			return e
 		}
@@ -87,7 +100,14 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 }
 
 // xtraFields defines additional fields for the nested reader
-func xtraFields() (fds []*chutils.FieldDef) {
+func xtraFields(excl bool) []*chutils.FieldDef {
+	// if the file is not excluded loans, then we need to add the fields that are not in the standard loan files
+	fds := make([]*chutils.FieldDef, 0)
+	if !excl {
+		for _, fd := range excluded() {
+			fds = append(fds, fd)
+		}
+	}
 	vfd := &chutils.FieldDef{
 		Name:        "qa",
 		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
@@ -130,8 +150,8 @@ func xtraFields() (fds []*chutils.FieldDef) {
 		Legal:       chutils.NewLegalValues(),
 		Missing:     "X",
 	}
-	fds = []*chutils.FieldDef{vfd, ffd, dqfd, vintfd, pvfd, stdfd}
-	return
+	fds = append(fds, vfd, ffd, dqfd, vintfd, pvfd, stdfd)
+	return fds
 }
 
 // vField returns the validation results for each field -- 0 = pass, 1 = fail in a string which has a  keyval format
@@ -198,7 +218,7 @@ func fField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validat
 // fField returns the name of the file we're loading
 func stdField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
 	val := "Y"
-	if strings.Contains(fileName, "EX") {
+	if Excl {
 		val = "N"
 	}
 	return val, nil
@@ -257,8 +277,88 @@ func pvField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, valida
 	return opb / (ltv / 100.0), nil
 }
 
-// build builds the TableDef for the static field files.
-func build() *chutils.TableDef {
+// nsDoc -- is N for standard loans.  This func is used to populate the field when reading a standard file.
+func nsDocField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return "N", nil
+}
+
+// nsUw -- is N for standard loans.  This func is used to populate the field when reading a standard file.
+func nsUwField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return "N", nil
+}
+
+// gGuar -- is N for standard loans.  This func is used to populate the field when reading a standard file.
+func gGuarField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return "N", nil
+}
+
+// negAm -- is N for standard loans.  This func is used to populate the field when reading a standard file.
+func negAmField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
+	return "N", nil
+}
+
+// excluded defines the FieldDefs for the extra fields that are in the files of excluded loans
+func excluded() []*chutils.FieldDef {
+	var (
+		strMiss = "X" // generic missing value for FixedString(1)
+
+		nsDocMiss, nsDocDef = strMiss, "N"
+		nsDocLvl            = []string{"Y", "N"}
+
+		nsUwMiss, nsUwDef = strMiss, "N"
+		nsUwLvl           = []string{"Y", "N"}
+
+		gGuarMiss, gGuarDef = strMiss, "N"
+		gGuarLvl            = []string{"Y", "N"}
+
+		negAmMiss, negAmDef = strMiss, "N"
+		negAmLvl            = []string{"Y", "N"}
+	)
+	fds := make([]*chutils.FieldDef, 0)
+	fd := &chutils.FieldDef{
+		Name:        "nsDoc",
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
+		Description: "non-standard documentation: Y, N, missing=" + nsDocMiss,
+		Legal:       &chutils.LegalValues{Levels: nsDocLvl},
+		Missing:     nsDocMiss,
+		Default:     nsDocDef,
+	}
+	fds = append(fds, fd)
+
+	fd = &chutils.FieldDef{
+		Name:        "nsUw",
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
+		Description: "non-standard underwriting: Y, N, missing=" + nsUwMiss,
+		Legal:       &chutils.LegalValues{Levels: nsUwLvl},
+		Missing:     nsUwMiss,
+		Default:     nsUwDef,
+	}
+	fds = append(fds, fd)
+
+	fd = &chutils.FieldDef{
+		Name:        "gGuar",
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
+		Description: "government issued/guaranteed: Y, N, missing=" + gGuarMiss,
+		Legal:       &chutils.LegalValues{Levels: gGuarLvl},
+		Missing:     gGuarMiss,
+		Default:     gGuarDef,
+	}
+	fds = append(fds, fd)
+
+	fd = &chutils.FieldDef{
+		Name:        "negAm",
+		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
+		Description: "loan can neg am: Y, N, missing=" + negAmMiss,
+		Legal:       &chutils.LegalValues{Levels: negAmLvl},
+		Missing:     negAmMiss,
+		Default:     negAmDef,
+	}
+	fds = append(fds, fd)
+	return fds
+}
+
+// build builds the TableDef for the loan file
+func build(excl bool) *chutils.TableDef {
 	var (
 		// date ranges & missing value
 		minDt  = time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -337,6 +437,9 @@ func build() *chutils.TableDef {
 		//│ 11300   │ 26900   │
 		//│ 39140   │ 39150   │
 		msaLvl = []string{
+			"31100", "29140", "26100", "37380", "37700", "44600", "14060", "42060", "21940", "11340", "26180", "19380", "11300", "39140",
+			"49620", "49660", "49420", "49740", "49700", "49500",
+
 			msaDef, "10100", "10140", "10180", "10220", "10300", "10380", "10420", "10460", "10500",
 			"10540", "10580", "10620", "10660", "10700", "10740", "10760", "10780", "10820", "10860",
 			"10900", "10940", "10980", "11020", "11060", "11100", "11140", "11180", "11220", "11260",
@@ -1669,6 +1772,13 @@ func build() *chutils.TableDef {
 		Default:     totDefrlDef,
 	}
 	fds[107] = fd
+
+	// if we're reading a file of excluded loans, add in the extra fields in those files.
+	if excl {
+		for ind, fdx := range excluded() {
+			fds[108+ind] = fdx
+		}
+	}
 	// ============================
 	// not in fannie:
 	//   preHARPlnId

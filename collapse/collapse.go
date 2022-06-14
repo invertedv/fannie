@@ -1,6 +1,5 @@
 package collapse
 
-//TODO add ageFpDt
 import (
 	"fmt"
 	"github.com/invertedv/chutils"
@@ -132,6 +131,7 @@ SELECT
   groupArray(nonIntUpb) AS nonIntUpb,
   groupArray(frgvUpb) AS frgvUpb,
   groupArray(totPrin) AS totPrin,
+  groupArray(servAct) AS servAct,
   groupArray(matDt) AS matDt,
 
   arrayFirst(x->x!='<channelMissing>' ? 1 : 0, groupArray(channel)) = '' ? '<channelMissing>' : arrayFirst(x->x!='<channelMissing>' ? 1 : 0, groupArray(channel)) AS channel,
@@ -159,7 +159,8 @@ SELECT
   arrayFirst(x->x!='<zip3Missing>' ? 1 : 0, groupArray(zip3)) = '' ? '<zip3Missing>' : arrayFirst(x->x!='<zip3Missing>' ? 1 : 0, groupArray(zip3)) AS zip3,
   toFloat32(arrayAvg(arrayFilter(x -> x != <miMissing> ? 1 : 0, groupArray(mi))) > 0 ? arrayAvg(arrayFilter(x -> x != <miMissing> ? 1 : 0, groupArray(mi))) : <miMissing>)  AS mi,
   arrayFirst(x->x!='<amTypeMissing>' ? 1 : 0, groupArray(amType)) = '' ? '<amTypeMissing>' : arrayFirst(x->x!='<amTypeMissing>' ? 1 : 0, groupArray(amType)) AS amType,
-  arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) = '' ? '<pPenMissing>' : arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) AS pPen,
+//  arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) = '' ? '<pPenMissing>' : arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) AS pPen,
+  indexOf(groupArray(pPen), 'Y') = 0 ? 'Y' : 'N' AS pPen,
   arrayFirst(x->x!='<ioMissing>' ? 1 : 0, groupArray(io)) = '' ? '<ioMissing>' : arrayFirst(x->x!='<ioMissing>' ? 1 : 0, groupArray(io)) AS io,
 
   arrayFirst(x->year(x) > 1970 ? 1 : 0, groupArray(ioDt)) AS ioDt,
@@ -179,13 +180,16 @@ SELECT
   arrayMax(groupArray(fclProOth)) AS fclProOth,
   toFloat32(arrayAvg(arrayFilter(x -> x != <fclWriteOffMissing> ? 1 : 0, groupArray(fclWriteOff))) > 0 ? arrayAvg(arrayFilter(x -> x != <fclWriteOffMissing> ? 1 : 0, groupArray(fclWriteOff))) : <fclWriteOffMissing>)  AS fclWriteOff,
   arrayFirst(x->x!='<miTypeMissing>' ? 1 : 0, groupArray(miType)) = '' ? '<miTypeMissing>' : arrayFirst(x->x!='<miTypeMissing>' ? 1 : 0, groupArray(miType)) AS miType,
-  arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) = '' ? '<servActMissing>' : arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) AS servAct,
+//  arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) = '' ? '<servActMissing>' : arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) AS servAct,
   arrayFirst(x->x!='<reloMissing>' ? 1 : 0, groupArray(relo)) = '' ? '<reloMissing>' : arrayFirst(x->x!='<reloMissing>' ? 1 : 0, groupArray(relo)) AS relo,
   arrayFirst(x->x!='<valMthdMissing>' ? 1 : 0, groupArray(valMthd)) = '' ? '<valMthdMissing>' : arrayFirst(x->x!='<valMthdMissing>' ? 1 : 0, groupArray(valMthd)) AS valMthd,
   arrayFirst(x->x!='<sConformMissing>' ? 1 : 0, groupArray(sConform)) = '' ? '<sConformMissing>' : arrayFirst(x->x!='<sConformMissing>' ? 1 : 0, groupArray(sConform)) AS sConform,
   arrayFirst(x->x!='<hltvMissing>' ? 1 : 0, groupArray(hltv)) = '' ? '<hltvMissing>' : arrayFirst(x->x!='<hltvMissing>' ? 1 : 0, groupArray(hltv)) AS hltv,
-  arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) = '' ? '<reprchMwMissing>' : arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) AS reprchMw,
-  arrayFirst(x->x!='<altResMissing>' ? 1 : 0, groupArray(altRes)) = '' ? '<altResMissing>' : arrayFirst(x->x!='<altResMissing>' ? 1 : 0, groupArray(altRes)) AS altRes,
+
+//  arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) = '' ? '<reprchMwMissing>' : arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) AS reprchMw,
+  indexOf(groupArray(reprchMw), 'Y') > 0 ? 'Y' : 'N' AS reprchMw,
+
+  arrayFirst(x->x!='<altResMissing>' AND x!='7' AND x!='9' ? 1 : 0, groupArray(altRes)) = '' ? '<altResMissing>' : arrayFirst(x->x!='<altResMissing>' AND x!='7' AND x!='9' ? 1 : 0, groupArray(altRes)) AS altRes,
   toInt32(arrayAvg(arrayFilter(x -> x > 0 ? 1 : 0, groupArray(altResCnt))) > 0 ? arrayAvg(arrayFilter(x -> x > 0 ? 1 : 0, groupArray(altResCnt))) : -1)  AS altResCnt,
   toFloat32(arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(totDefrl))) > 0 ? arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(totDefrl))) : -1)  AS totDefrl,
   arrayElement(groupArray(file), 1) AS file,
@@ -194,7 +198,12 @@ SELECT
   position(lower(file), 'harp') > 0 ? 'Y' : 'N' AS harp,
   arrayElement(groupArray(x), 1) AS qa,
   arrayElement(groupArray(harpLnId), 1) AS harpLnId,
-  arrayElement(groupArray(standard), 1) AS standard
+  arrayElement(groupArray(standard), 1) AS standard,
+
+  arrayElement(groupArray(nsDoc), 1) AS nsDoc,
+  arrayElement(groupArray(nsUw), 1) AS nsUw,
+  arrayElement(groupArray(gGuar), 1) AS gGuar,
+  arrayElement(groupArray(negAm), 1) AS negAm
 FROM 
   (SELECT 
     *,
