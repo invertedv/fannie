@@ -28,14 +28,14 @@ func init() {
 }
 
 func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chutils.Connect) (err error) {
-
+	//return nil
 	fileName = sourceFile
 
 	f, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
-	rdr := file.NewReader(fileName, '|', '\n', '"', 0, 0, 0, f, 6000000)
+	rdr := file.NewReader(fileName, '|', '\n', '"', 0, 0, 0, f, 100000000)
 	rdr.Skip = 0
 	defer func() {
 		// don't throw an error if we already have one
@@ -71,7 +71,7 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 	if !Excl {
 		newCalcs = append(newCalcs, nsDocField, nsUwField, gGuarField, negAmField)
 	}
-	newCalcs = append(newCalcs, vField, fField, dqField, vintField, pvField, stdField)
+	newCalcs = append(newCalcs, fField, dqField, vintField, pvField, stdField, vField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
 	rdrsn := make([]chutils.Input, 0)
@@ -93,9 +93,8 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 		}
 		rdrsn = append(rdrsn, rn)
 	}
-	//	TableDef = rdrsn[0].TableSpec()
 
-	err = chutils.Concur(12, rdrsn, wrtrs, 400000)
+	err = chutils.Concur(12, rdrsn, wrtrs, 100000)
 	return
 }
 
@@ -109,11 +108,12 @@ func xtraFields(excl bool) []*chutils.FieldDef {
 		}
 	}
 	vfd := &chutils.FieldDef{
-		Name:        "qa",
-		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
+		Name:   "qa",
+		ChSpec: chutils.ChField{Base: chutils.ChString}, //Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
+		//		ChSpec:      chutils.ChField{Base: chutils.ChInt, Length: 32, Funcs: chutils.OuterFuncs{chutils.OuterArray}},
 		Description: "validation results for each field: 0=pass, 1=fail",
 		Legal:       chutils.NewLegalValues(),
-		Missing:     "!",
+		Missing:     2, //"!",
 	}
 	ffd := &chutils.FieldDef{
 		Name:        "file",
@@ -140,7 +140,7 @@ func xtraFields(excl bool) []*chutils.FieldDef {
 		Name:        "propVal",
 		ChSpec:      chutils.ChField{Base: chutils.ChFloat, Length: 32},
 		Description: "property value at origination",
-		Legal:       &chutils.LegalValues{LowLimit: float32(1000.0), HighLimit: float32(5000000.0), Levels: nil},
+		Legal:       &chutils.LegalValues{LowLimit: float32(1000.0), HighLimit: float32(5000000.0)},
 		Missing:     float32(-1.0),
 	}
 	stdfd := &chutils.FieldDef{
@@ -150,13 +150,14 @@ func xtraFields(excl bool) []*chutils.FieldDef {
 		Legal:       chutils.NewLegalValues(),
 		Missing:     "X",
 	}
-	fds = append(fds, vfd, ffd, dqfd, vintfd, pvfd, stdfd)
+	fds = append(fds, ffd, dqfd, vintfd, pvfd, stdfd, vfd)
 	return fds
 }
 
 // vField returns the validation results for each field -- 0 = pass, 1 = fail in a string which has a  keyval format
 func vField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
 	res := make([]byte, 0)
+	res = append(res, []byte(":")...)
 	for ind, v := range valid {
 		name := td.FieldDefs[ind].Name
 
@@ -195,16 +196,15 @@ func vField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validat
 			}
 		}
 
-		switch vx {
-		case chutils.VPass, chutils.VDefault:
-			res = append(res, []byte(name+":0;")...)
-		default:
-			res = append(res, []byte(name+":1;")...)
+		if vx != chutils.VPass && vx != chutils.VDefault {
+			res = append(res, []byte(name+":")...)
+
 		}
 	}
-	// delete trailing ;
-	res[len(res)-1] = ' '
-	return string(res), nil
+	if len(res) > 1 {
+		return string(res), nil
+	}
+	return "", nil
 }
 
 // fileName is global since used as a closure to fField
@@ -628,6 +628,8 @@ func build(excl bool) *chutils.TableDef {
 
 		ioDtMin, ioDtMax, ioDtMiss, ioDtDef     = minDt, futDt, missDt, missDt
 		ioRemMin, ioRemMax, ioRemMiss, ioRemDef = int32(0), int32(700), int32(-1), int32(-1)
+
+		totPrinMiss, totPrinDef = float32(-1.0), float32(0.0)
 
 		dqStatMiss = "!"
 		dqStatLvl  = make([]string, 0)
@@ -1173,7 +1175,8 @@ func build(excl bool) *chutils.TableDef {
 		ChSpec:      chutils.ChField{Base: chutils.ChFloat, Length: 32},
 		Description: "delta upb",
 		Legal:       &chutils.LegalValues{},
-		Missing:     fltMiss,
+		Missing:     totPrinMiss,
+		Default:     totPrinDef,
 	}
 	fds[48] = fd
 

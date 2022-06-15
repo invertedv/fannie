@@ -6,13 +6,11 @@ import (
 	s "github.com/invertedv/chutils/sql"
 	"github.com/invertedv/fannie/raw"
 	"strings"
-	"time"
 )
 
 // add harp table
 func GroupBy(sourceTable string, table string, harpTable string, create bool, con *chutils.Connect) error {
 	// build rowTable -- generates a row number for each lnId
-	fmt.Println("start time", time.Now())
 	q := strings.Replace(strings.Replace(qry, "sourceTable", sourceTable, 2), "harpTable", harpTable, 1)
 	// the query has placeholders for the missing values of fields of the form <fieldMissing>
 	for _, f := range raw.TableDef.FieldDefs {
@@ -26,6 +24,9 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 	if create {
 		// nested fields
 		if e := rdr.TableSpec().Nest("monthly", "month", "matDt"); e != nil {
+			return e
+		}
+		if e := rdr.TableSpec().Nest("qa", "field", "cntFail"); e != nil {
 			return e
 		}
 		// bring over descriptions
@@ -50,8 +51,16 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 				f.Description = "loan refi to this HARP loan"
 			case "harp":
 				f.Description = "loan is HARP: Y, N"
-				//				f.ChSpec.Base = chutils.ChFixedString
-				//				f.ChSpec.Length = 1
+			//				f.ChSpec.Base = chutils.ChFixedString
+			//				f.ChSpec.Length = 1
+			case "field":
+				f.Description = "field name"
+				f.ChSpec.Funcs = append(f.ChSpec.Funcs, chutils.OuterLowCardinality)
+			case "cntFail":
+				f.Description = "# of months field failed qa"
+			case "allFail":
+				f.Description = "fields that failed QA all months"
+				f.ChSpec.Funcs = append(f.ChSpec.Funcs, chutils.OuterLowCardinality)
 			}
 		}
 		if e := rdr.TableSpec().Create(con, table); e != nil {
@@ -110,7 +119,21 @@ FROM(
 GROUP BY lnId) AS a
 LEFT JOIN
   harpTable AS b
-ON a.lnId = b.oldLnId)
+ON a.lnId = b.oldLnId),
+q AS (
+  SELECT lnId, 
+    groupArray(grp) AS qa,
+    groupArray(n) AS nqa
+FROM (
+  SELECT 
+     lnId, 
+     arrayJoin(splitByChar(':', qa)) AS grp,
+     toInt32(count(*)) AS n
+  FROM tmp.source 
+  WHERE grp != ''
+  GROUP BY lnId, grp)
+GROUP BY lnId),
+r AS (
 SELECT
   lnId,
   groupArray(month) AS month,
@@ -194,25 +217,37 @@ SELECT
   toFloat32(arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(totDefrl))) > 0 ? arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(totDefrl))) : -1)  AS totDefrl,
   arrayElement(groupArray(file), 1) AS file,
   arrayFirst(x->x!='<vintageMissing>' ? 1 : 0, groupArray(vintage)) = '' ? '<vintageMissing>' : arrayFirst(x->x!='<vintageMissing>' ? 1 : 0, groupArray(vintage)) AS vintage,
-  toFloat32(arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(propVal))) > 0 ? arrayAvg(arrayFilter(x -> x >= 0 ? 1 : 0, groupArray(propVal))) : -1)  AS propVal,
+  toFloat32(arrayAvg(arrayFilter(x -> x != <propValMissing> ? 1 : 0, groupArray(propVal))) > 0 ? arrayAvg(arrayFilter(x -> x != <propValMissing> ? 1 : 0, groupArray(propVal))) : <propValMissing>)  AS propVal,
   position(lower(file), 'harp') > 0 ? 'Y' : 'N' AS harp,
-  arrayElement(groupArray(x), 1) AS qa,
-  arrayElement(groupArray(harpLnId), 1) AS harpLnId,
+//  arrayElement(groupArray(x), 1) AS qa,
+//  arrayElement(groupArray(harpLnId), 1) AS harpLnId,
   arrayElement(groupArray(standard), 1) AS standard,
 
   arrayElement(groupArray(nsDoc), 1) AS nsDoc,
   arrayElement(groupArray(nsUw), 1) AS nsUw,
   arrayElement(groupArray(gGuar), 1) AS gGuar,
   arrayElement(groupArray(negAm), 1) AS negAm
+//  arrayElement(groupArray(qa), 1) AS qa
 FROM 
   (SELECT 
     *,
     year(fpDt) > 1990 ? dateDiff('month', fpDt, month) : -1000 AS ageFpDt
   FROM  
     sourceTable as z 
-  JOIN v 
-  ON v.lnId=z.lnId
+//  JOIN v 
+//    ON v.lnId=z.lnId
   ORDER BY lnId, month
   LIMIT 10)
-GROUP BY lnId 
+GROUP BY lnId)
+select
+  r.*,
+//  v.x as qa,
+  v.harpLnId,
+  q.qa AS field,
+  q.nqa AS cntFail,
+  arrayFilter((x,y) -> y=length(month) ? 1 : 0, qa, nqa) AS allFail
+from
+  r left join go.harpIds as v
+on r.lnId=v.oldLnId
+join q on q.lnId = r.lnId
 `

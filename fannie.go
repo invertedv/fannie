@@ -30,9 +30,11 @@ func main() {
 
 	flag.Parse()
 	createTable := *create == "Y" || *create == "y"
+	//  1m24.974557878s, 1m2.991260235s for 2001Q2EXCL.csv
+	// : 1m33.066475613s, 1m5.603348601s 6 threads
+	// 1m32.039205298s, 1m6.800411966s 6 threads, granularity 32768
+	// s: 1m33.856826032s, 1m4.525401128s 6 threads, granularity 4096
 
-	//	_, _, _ = table, tmp, nConcur
-	// add trailing slash, if needed
 	if (*srcDir)[len(*srcDir)-1] != '/' {
 		*srcDir += "/"
 	}
@@ -79,8 +81,11 @@ func main() {
 	sort.Strings(fileList)
 	step1Time := 0.0
 	step2Time := 0.0
+	target := "2000Q1.csv" // "2001Q2EXCL.csv"
 	for ind, fileName := range fileList {
-		_ = ind
+		if fileName != target {
+			continue
+		}
 		fullFile := *srcDir + fileName
 		tmpTable := *tmp + ".source"
 		s := time.Now()
@@ -97,7 +102,6 @@ func main() {
 		fmt.Printf("Done with %s. %d out of %d ,times: %v, %v\n", fileName, ind+1, len(fileList), step1, step2)
 		step1Time += step1.Seconds()
 		step2Time += step2.Seconds()
-		break
 
 	}
 	step1Time /= 3600.0
