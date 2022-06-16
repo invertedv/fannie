@@ -1,3 +1,5 @@
+// Package collapse reduces the raw table that has one entry per loan per month to a table that has one entry
+// per loan.
 package collapse
 
 import (
@@ -8,16 +10,18 @@ import (
 	"strings"
 )
 
-// add harp table
+// GroupBy groups the raw table (which has one row per loan per month to a table with one row per loan
 func GroupBy(sourceTable string, table string, harpTable string, create bool, con *chutils.Connect) error {
-	// build rowTable -- generates a row number for each lnId
-	q := strings.Replace(strings.Replace(qry, "sourceTable", sourceTable, 2), "harpTable", harpTable, 1)
+	// remove placeholder table names
+	q := strings.Replace(strings.Replace(qry, "sourceTable", sourceTable, 2), "harpTable", harpTable, 2)
+
 	// the query has placeholders for the missing values of fields of the form <fieldMissing>
 	for _, f := range raw.TableDef.FieldDefs {
 		q = strings.Replace(q, fmt.Sprintf("<%sMissing>", f.Name), fmt.Sprintf("%v", f.Missing), -1)
 	}
 
 	rdr := s.NewReader(q, con)
+	defer func() { _ = rdr.Close() }()
 	if e := rdr.Init("lnId", chutils.MergeTree); e != nil {
 		return e
 	}
@@ -44,15 +48,18 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 					}
 				}
 			}
+			// add some details for new fields
 			switch f.Name {
 			case "ageFpDt":
 				f.Description = "age based on fdDt, missing=-1000"
 			case "harpLnId":
-				f.Description = "loan refi to this HARP loan"
+				f.Description = "loan refinanced to this HARP loan"
+			case "preHarpId":
+				f.Description = "HARP loan refinanced from this loan"
 			case "harp":
 				f.Description = "loan is HARP: Y, N"
-			//				f.ChSpec.Base = chutils.ChFixedString
-			//				f.ChSpec.Length = 1
+				f.ChSpec.Base = chutils.ChFixedString
+				f.ChSpec.Length = 1
 			case "field":
 				f.Description = "field name"
 				f.ChSpec.Funcs = append(f.ChSpec.Funcs, chutils.OuterLowCardinality)
@@ -79,6 +86,7 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 //
 // Note: there are two "LIMIT 10" statements.  These make the query to run much faster for the Init() method.
 // The Init() method appends a "LIMIT 1", but this query is complex enough that isn't helpful.
+// There are placeholders for the table created by package raw and the map of pre-HARP ids to HARP ids
 const qry = `
 WITH q AS (
   SELECT lnId, 
@@ -142,7 +150,6 @@ SELECT
   arrayFirst(x->x!='<zip3Missing>' ? 1 : 0, groupArray(zip3)) = '' ? '<zip3Missing>' : arrayFirst(x->x!='<zip3Missing>' ? 1 : 0, groupArray(zip3)) AS zip3,
   toFloat32(arrayAvg(arrayFilter(x -> x != <miMissing> ? 1 : 0, groupArray(mi))) > 0 ? arrayAvg(arrayFilter(x -> x != <miMissing> ? 1 : 0, groupArray(mi))) : <miMissing>)  AS mi,
   arrayFirst(x->x!='<amTypeMissing>' ? 1 : 0, groupArray(amType)) = '' ? '<amTypeMissing>' : arrayFirst(x->x!='<amTypeMissing>' ? 1 : 0, groupArray(amType)) AS amType,
-//  arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) = '' ? '<pPenMissing>' : arrayFirst(x->x!='<pPenMissing>' ? 1 : 0, groupArray(pPen)) AS pPen,
   indexOf(groupArray(pPen), 'Y') = 0 ? 'Y' : 'N' AS pPen,
   arrayFirst(x->x!='<ioMissing>' ? 1 : 0, groupArray(io)) = '' ? '<ioMissing>' : arrayFirst(x->x!='<ioMissing>' ? 1 : 0, groupArray(io)) AS io,
 
@@ -163,13 +170,11 @@ SELECT
   arrayMax(groupArray(fclProOth)) AS fclProOth,
   toFloat32(arrayAvg(arrayFilter(x -> x != <fclWriteOffMissing> ? 1 : 0, groupArray(fclWriteOff))) > 0 ? arrayAvg(arrayFilter(x -> x != <fclWriteOffMissing> ? 1 : 0, groupArray(fclWriteOff))) : <fclWriteOffMissing>)  AS fclWriteOff,
   arrayFirst(x->x!='<miTypeMissing>' ? 1 : 0, groupArray(miType)) = '' ? '<miTypeMissing>' : arrayFirst(x->x!='<miTypeMissing>' ? 1 : 0, groupArray(miType)) AS miType,
-//  arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) = '' ? '<servActMissing>' : arrayFirst(x->x!='<servActMissing>' ? 1 : 0, groupArray(servAct)) AS servAct,
   arrayFirst(x->x!='<reloMissing>' ? 1 : 0, groupArray(relo)) = '' ? '<reloMissing>' : arrayFirst(x->x!='<reloMissing>' ? 1 : 0, groupArray(relo)) AS relo,
   arrayFirst(x->x!='<valMthdMissing>' ? 1 : 0, groupArray(valMthd)) = '' ? '<valMthdMissing>' : arrayFirst(x->x!='<valMthdMissing>' ? 1 : 0, groupArray(valMthd)) AS valMthd,
   arrayFirst(x->x!='<sConformMissing>' ? 1 : 0, groupArray(sConform)) = '' ? '<sConformMissing>' : arrayFirst(x->x!='<sConformMissing>' ? 1 : 0, groupArray(sConform)) AS sConform,
   arrayFirst(x->x!='<hltvMissing>' ? 1 : 0, groupArray(hltv)) = '' ? '<hltvMissing>' : arrayFirst(x->x!='<hltvMissing>' ? 1 : 0, groupArray(hltv)) AS hltv,
 
-//  arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) = '' ? '<reprchMwMissing>' : arrayFirst(x->x!='<reprchMwMissing>' ? 1 : 0, groupArray(reprchMw)) AS reprchMw,
   indexOf(groupArray(reprchMw), 'Y') > 0 ? 'Y' : 'N' AS reprchMw,
 
   arrayFirst(x->x!='<altResMissing>' AND x!='7' AND x!='9' ? 1 : 0, groupArray(altRes)) = '' ? '<altResMissing>' : arrayFirst(x->x!='<altResMissing>' AND x!='7' AND x!='9' ? 1 : 0, groupArray(altRes)) AS altRes,
@@ -179,35 +184,36 @@ SELECT
   arrayFirst(x->x!='<vintageMissing>' ? 1 : 0, groupArray(vintage)) = '' ? '<vintageMissing>' : arrayFirst(x->x!='<vintageMissing>' ? 1 : 0, groupArray(vintage)) AS vintage,
   toFloat32(arrayAvg(arrayFilter(x -> x != <propValMissing> ? 1 : 0, groupArray(propVal))) > 0 ? arrayAvg(arrayFilter(x -> x != <propValMissing> ? 1 : 0, groupArray(propVal))) : <propValMissing>)  AS propVal,
   position(lower(file), 'harp') > 0 ? 'Y' : 'N' AS harp,
-//  arrayElement(groupArray(x), 1) AS qa,
-//  arrayElement(groupArray(harpLnId), 1) AS harpLnId,
   arrayElement(groupArray(standard), 1) AS standard,
 
   arrayElement(groupArray(nsDoc), 1) AS nsDoc,
   arrayElement(groupArray(nsUw), 1) AS nsUw,
   arrayElement(groupArray(gGuar), 1) AS gGuar,
   arrayElement(groupArray(negAm), 1) AS negAm
-//  arrayElement(groupArray(qa), 1) AS qa
 FROM 
   (SELECT 
     *,
     year(fpDt) > 1990 ? dateDiff('month', fpDt, month) : -1000 AS ageFpDt
   FROM  
     sourceTable as z 
-//  JOIN v 
-//    ON v.lnId=z.lnId
   ORDER BY lnId, month
   LIMIT 10)
 GROUP BY lnId)
 select
   r.*,
-//  v.x as qa,
   v.harpLnId,
+  x.oldLnId AS preHarpId,
   q.qa AS field,
   q.nqa AS cntFail,
   arrayFilter((x,y) -> y=length(month) ? 1 : 0, qa, nqa) AS allFail
-from
-  r left join harpTable as v
-on r.lnId=v.oldLnId
-join q on q.lnId = r.lnId
+FROM
+  r 
+LEFT JOIN
+  harpTable as v
+ON r.lnId=v.oldLnId
+LEFT JOIN
+  harpTable AS x
+ON r.lnId = x.harpLnId 
+LEFT JOIN q 
+ON q.lnId = r.lnId
 `

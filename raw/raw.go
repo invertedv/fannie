@@ -1,3 +1,6 @@
+// Package raw reads in the raw data -- either the standard or non-standard field.
+// It also adds a handful of new fields.
+// The output table is <tmp>.source where tmp is the tmp DB specified on the command line
 package raw
 
 import (
@@ -11,9 +14,10 @@ import (
 	"time"
 )
 
-// TableDef is TableDef for the source table.  It is exported as other packages (e.g. collapse) that need
-// details of these fields
+// TableDef is TableDef for the source table.  It is exported as package collapse needs details of these fields
 var TableDef *chutils.TableDef
+
+// Excl is true if this is a non-standard file
 var Excl bool
 
 func init() {
@@ -28,7 +32,7 @@ func init() {
 }
 
 func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chutils.Connect) (err error) {
-	//return nil
+	// fileName is package global
 	fileName = sourceFile
 
 	f, err := os.Open(fileName)
@@ -47,15 +51,17 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 	Excl = false
 	rdr.SetTableSpec(build(Excl))
 
-	// if this is an exclusion file, then this will produce an error
+	// if this is an exclusion (non-standard) file, then this will produce an error
 	_, _, e := rdr.Read(1, true)
 	if e != nil {
 		Excl = true
 		rdr.SetTableSpec(build(Excl))
 	}
-	rdr.Reset()
+	if e := rdr.Reset(); e != nil {
+		return e
+	}
 
-	// build slice of readers
+	// build slice of readers. Note: chutils.Concur will close these.
 	rdrs, err := file.Rdrs(rdr, nConcur)
 	if err != nil {
 		return
@@ -68,9 +74,11 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 	}
 
 	newCalcs := make([]nested.NewCalcFn, 0)
+	// fields that are not in the standard file
 	if !Excl {
 		newCalcs = append(newCalcs, nsDocField, nsUwField, gGuarField, negAmField)
 	}
+	// new fields
 	newCalcs = append(newCalcs, fField, dqField, vintField, pvField, stdField, vField)
 
 	// rdrsn is a slice of nested readers -- needed since we are adding fields to the raw data
@@ -94,7 +102,7 @@ func LoadRaw(sourceFile string, table string, create bool, nConcur int, con *chu
 		rdrsn = append(rdrsn, rn)
 	}
 
-	err = chutils.Concur(12, rdrsn, wrtrs, 100000)
+	err = chutils.Concur(nConcur, rdrsn, wrtrs, 100000)
 	return
 }
 
@@ -103,9 +111,7 @@ func xtraFields(excl bool) []*chutils.FieldDef {
 	// if the file is not excluded loans, then we need to add the fields that are not in the standard loan files
 	fds := make([]*chutils.FieldDef, 0)
 	if !excl {
-		for _, fd := range excluded() {
-			fds = append(fds, fd)
-		}
+		fds = append(fds, excluded()...)
 	}
 	vfd := &chutils.FieldDef{
 		Name:        "qa",
@@ -236,7 +242,7 @@ func dqField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, valida
 	return int32(dq), nil
 }
 
-// fField adds the file name data comes from to output table
+// vintField finds the vintage based on fpDt
 func vintField(td *chutils.TableDef, data chutils.Row, valid chutils.Valid, validate bool) (interface{}, error) {
 	ind, _, err := td.Get("fpDt")
 	if err != nil {
@@ -356,7 +362,7 @@ func excluded() []*chutils.FieldDef {
 	return fds
 }
 
-// build builds the TableDef for the loan file
+// build builds the TableDef for the loan file (standard file)
 func build(excl bool) *chutils.TableDef {
 	var (
 		// date ranges & missing value
