@@ -80,47 +80,7 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 // Note: there are two "LIMIT 10" statements.  These make the query to run much faster for the Init() method.
 // The Init() method appends a "LIMIT 1", but this query is complex enough that isn't helpful.
 const qry = `
-WITH v AS (
-SELECT
-    lnId,
-    arrayStringConcat(arrayMap(x,y -> concat(x, ':', toString(y)), field, validation), ';') as x,
-    b.harpLnId
-FROM ( 
-SELECT
-    lnId,
-    groupArray(f) AS field,
-    groupArray(v) AS validation
-FROM(    
-    SELECT
-      lnId,
-      field AS f,
-      // qa for monthly uses max (any bad?), for compressed fields min (got a good val?)
-      CASE
-        WHEN f IN ('month', 'upb', 'dq', 'servicer', 'curRate', 'age', 'rTermLgl', 'rTermAct', 'dqStat', 'mod',
-                   'zb', 'ioRem', 'bap', 'program', 'nonIntUpb', 'frgvUpb', 'totPrin', 'matDt', 'ageFpDt') THEN Max(valid)
-        ELSE min(valid)
-      END AS v
-    FROM (
-        SELECT
-            lnId,
-            arrayElement(splitByChar(':', v), 1) AS field,
-            substr(arrayElement(splitByChar(':', v), 2), 1, 1) = '0' ? 0 : 1 AS valid
-        FROM (    
-            SELECT
-                lnId,
-                arrayJoin(splitByChar(';', qa)) AS v
-            FROM
-                sourceTable
-            LIMIT 10)
-     // do not include qa for fields that were dropped
-     WHERE position(field, 'unused') = 0)
-     GROUP BY lnId, field
-     ORDER BY lnId, field)
-GROUP BY lnId) AS a
-LEFT JOIN
-  harpTable AS b
-ON a.lnId = b.oldLnId),
-q AS (
+WITH q AS (
   SELECT lnId, 
     groupArray(grp) AS qa,
     groupArray(n) AS nqa
@@ -129,7 +89,7 @@ FROM (
      lnId, 
      arrayJoin(splitByChar(':', qa)) AS grp,
      toInt32(count(*)) AS n
-  FROM tmp.source 
+  FROM sourceTable 
   WHERE grp != ''
   GROUP BY lnId, grp)
 GROUP BY lnId),
@@ -247,7 +207,7 @@ select
   q.nqa AS cntFail,
   arrayFilter((x,y) -> y=length(month) ? 1 : 0, qa, nqa) AS allFail
 from
-  r left join go.harpIds as v
+  r left join harpTable as v
 on r.lnId=v.oldLnId
 join q on q.lnId = r.lnId
 `

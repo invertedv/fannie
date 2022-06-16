@@ -81,7 +81,7 @@ func main() {
 	sort.Strings(fileList)
 	step1Time := 0.0
 	step2Time := 0.0
-	target := "2000Q1.csv" // "2001Q2EXCL.csv"
+	target := "2000Q2.csv" // "2001Q2EXCL.csv"
 	for ind, fileName := range fileList {
 		if fileName != target {
 			continue

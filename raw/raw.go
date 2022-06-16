@@ -108,12 +108,11 @@ func xtraFields(excl bool) []*chutils.FieldDef {
 		}
 	}
 	vfd := &chutils.FieldDef{
-		Name:   "qa",
-		ChSpec: chutils.ChField{Base: chutils.ChString}, //Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
-		//		ChSpec:      chutils.ChField{Base: chutils.ChInt, Length: 32, Funcs: chutils.OuterFuncs{chutils.OuterArray}},
-		Description: "validation results for each field: 0=pass, 1=fail",
+		Name:        "qa",
+		ChSpec:      chutils.ChField{Base: chutils.ChString, Funcs: chutils.OuterFuncs{chutils.OuterLowCardinality}},
+		Description: "validation results for each field: ",
 		Legal:       chutils.NewLegalValues(),
-		Missing:     2, //"!",
+		Missing:     "!",
 	}
 	ffd := &chutils.FieldDef{
 		Name:        "file",
