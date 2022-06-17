@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func ExampleCollapse() {
+func ExampleGroupBy() {
 	var con *chutils.Connect
 	con, err := chutils.NewConnect("127.0.0.1", "tester", "testGoNow", clickhouse.Settings{})
 	if err != nil {

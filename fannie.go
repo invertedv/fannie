@@ -40,6 +40,8 @@
 // maps HARP loans to their corresponding pre-HARP loan is loaded and available.  This table isn't needed after all the
 // files are loaded.
 //
+// See the example under package collapse for the structure of the table.
+//
 // The data is available at https://datadynamics.fanniemae.com/data-dynamics/#/reportMenu;category=HP.
 package main
 
