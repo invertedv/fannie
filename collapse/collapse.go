@@ -1,5 +1,9 @@
 // Package collapse reduces the raw table that has one entry per loan per month to a table that has one entry
 // per loan.
+// There are nested tables:
+//   - monthly.  These are values that change every month.
+//   - qa. The qa table.
+//
 package collapse
 
 import (
@@ -37,7 +41,7 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 		for _, f := range rdr.TableSpec().FieldDefs {
 			if _, fraw, e := raw.TableDef.Get(f.Name); e == nil {
 				f.Description = fraw.Description
-				// These don't survive the compression
+				// These don't survive the groupArray
 				if fraw.ChSpec.Base == chutils.ChFixedString {
 					f.ChSpec.Base = chutils.ChFixedString
 					f.ChSpec.Length = fraw.ChSpec.Length
@@ -48,7 +52,7 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 					}
 				}
 			}
-			// add some details for new fields
+			// added details for new fields
 			switch f.Name {
 			case "ageFpDt":
 				f.Description = "age based on fdDt, missing=-1000"

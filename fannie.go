@@ -1,10 +1,8 @@
-// package fannie loads the standard, HARP and non-standard (excluded) loans made available by Fannie Mae.
-// The data is available at https://datadynamics.fanniemae.com/data-dynamics/#/reportMenu;category=HP.
+// Package fannie loads the standard, HARP and non-standard (excluded) loans made available by Fannie Mae
+// into a ClickHouse database.
 //
-// The final result is a single data with nested arrays for time-varying fields.
-// Features:
-//   - The data is subject to QA.  The results are presented as two string fields in a KeyVal format.
-//   - A "DESCRIBE" of the output table provides info on each field
+// The final result is a single table with nested arrays for time-varying fields.
+// Key features of this package:
 //   - New fields created are:
 //      - vintage (e.g. 2010Q2)
 //      - standard - Y/N flag, Y=standard process loan
@@ -19,8 +17,9 @@
 //                - cntFail. The number of months for which this field failed qa.  For static fields, this value will
 //                   be 1.
 //           - allFail.  An array of field names which failed for qa.  For monthly fields, this means the field failed for all months.
+//   - A "DESCRIBE" of the output table provides info on each field.
 //
-// command-line parameters:
+// The command-line parameters are:
 //   -host  ClickHouse IP address. Default: 127.0.0.1.
 //   -user  ClickHouse user. Default: default
 //   -password ClickHouse password for user. Default: <empty>.
@@ -37,6 +36,11 @@
 // A combined table can be built by running the app twice pointing to the same -table.
 // On the first run, set -create Y and set -create N for the second run.
 //
+// Note: for this package to run correctly, the standard loans should be loaded first, so that the table that
+// maps HARP loans to their corresponding pre-HARP loan is loaded and available.  This table isn't needed after all the
+// files are loaded.
+//
+// The data is available at https://datadynamics.fanniemae.com/data-dynamics/#/reportMenu;category=HP.
 package main
 
 import (
@@ -69,10 +73,6 @@ func main() {
 
 	flag.Parse()
 	createTable := *create == "Y" || *create == "y"
-	//  1m24.974557878s, 1m2.991260235s for 2001Q2EXCL.csv
-	// : 1m33.066475613s, 1m5.603348601s 6 threads
-	// 1m32.039205298s, 1m6.800411966s 6 threads, granularity 32768
-	// s: 1m33.856826032s, 1m4.525401128s 6 threads, granularity 4096
 
 	if (*srcDir)[len(*srcDir)-1] != '/' {
 		*srcDir += "/"
@@ -109,7 +109,7 @@ func main() {
 		}
 	}
 	if len(fileList) == 0 {
-		log.Fatalln(fmt.Errorf("%s", "diredtory has no .csv files"))
+		log.Fatalln(fmt.Errorf("%s", "directory has no .csv files"))
 	}
 	if gotMap {
 		if e := raw.LoadHarpMap(*srcDir+"Loan_Mapping.txt", *mapTable, con); e != nil {
