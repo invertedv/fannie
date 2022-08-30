@@ -3,7 +3,6 @@
 // There are nested tables:
 //   - monthly.  These are values that change every month.
 //   - qa. The qa table.
-//
 package collapse
 
 import (
@@ -54,6 +53,8 @@ func GroupBy(sourceTable string, table string, harpTable string, create bool, co
 			}
 			// added details for new fields
 			switch f.Name {
+			case "bucket":
+				f.Description = "loan bucket"
 			case "ageFpDt":
 				f.Description = "age based on fdDt, missing=-1000"
 			case "harpLnId":
@@ -205,6 +206,7 @@ FROM
 GROUP BY lnId)
 select
   r.*,
+  toInt32(modulo(arraySum(bitPositionsToArray(reinterpretAsUInt64(substr(r.lnId, 5, 8)))), 20)) AS bucket,
   v.harpLnId,
   x.oldLnId AS preHarpId,
   q.qa AS field,

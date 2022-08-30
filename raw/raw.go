@@ -1,12 +1,12 @@
 // Package raw reads in the raw data -- either the standard or non-standard files.
 // The package also adds a handful of new fields.
 //
-//  - qa.       Results of QA.  The string field lists every field that failed QA separated by colons.
-//  - file.     Name of the source file.
-//  - dq.       Numeric delinquency level.
-//  - vintage.  Vintage of the loan based on the first pay date. The string format is CCYY"Q"q, for example 2020Q1.
-//  - propVal.  Property value at origination calculated from original balance and LTV.
-//  - standard. Flag that is Y if the loan is a standard loan.
+//   - qa.       Results of QA.  The string field lists every field that failed QA separated by colons.
+//   - file.     Name of the source file.
+//   - dq.       Numeric delinquency level.
+//   - vintage.  Vintage of the loan based on the first pay date. The string format is CCYY"Q"q, for example 2020Q1.
+//   - propVal.  Property value at origination calculated from original balance and LTV.
+//   - standard. Flag that is Y if the loan is a standard loan.
 //
 // The output table is <tmp>.source where tmp is the tmp DB specified on the command line
 package raw
@@ -1855,7 +1855,7 @@ func LoadHarpMap(sourceFile string, table string, con *chutils.Connect) (err err
 		return e
 	}
 	wrtr := s.NewWriter(table, con)
-	if e := chutils.Export(rdr, wrtr, 0); e != nil {
+	if e := chutils.Export(rdr, wrtr, 0, false); e != nil {
 		return e
 	}
 	return nil

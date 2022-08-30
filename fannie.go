@@ -4,33 +4,34 @@
 // The final result is a single table with nested arrays for time-varying fields.
 // Key features of this package:
 //   - New fields created are:
-//      - vintage (e.g. 2010Q2)
-//      - standard - Y/N flag, Y=standard process loan
-//      - loan age based on first pay date
-//      - numeric dq field
-//      - property value at origination
-//      - harp - Y/N flag, Y=HARP loan.
-//      - file name from which the loan was loaded
-//      - QA results. There are three sets of fields:
-//          - The nested table qa that has two arrays:
-//                - field.  The name of a field that has validation issues.
-//                - cntFail. The number of months for which this field failed qa.  For static fields, this value will
-//                   be 1.
-//           - allFail.  An array of field names which failed for qa.  For monthly fields, this means the field failed for all months.
+//   - vintage (e.g. 2010Q2)
+//   - standard - Y/N flag, Y=standard process loan
+//   - loan age based on first pay date
+//   - numeric dq field
+//   - property value at origination
+//   - harp - Y/N flag, Y=HARP loan.
+//   - file name from which the loan was loaded
+//   - QA results. There are three sets of fields:
+//   - The nested table qa that has two arrays:
+//   - field.  The name of a field that has validation issues.
+//   - cntFail. The number of months for which this field failed qa.  For static fields, this value will
+//     be 1.
+//   - allFail.  An array of field names which failed for qa.  For monthly fields, this means the field failed for all months.
 //   - A "DESCRIBE" of the output table provides info on each field.
 //
 // The command-line parameters are:
-//   -host  ClickHouse IP address. Default: 127.0.0.1.
-//   -user  ClickHouse user. Default: default
-//   -password ClickHouse password for user. Default: <empty>.
-//   -table ClickHouse table in which to insert the data.
-//   -maptable.  Clickhouse table that maps pre-HARP loan ids to HARP ids.  This table is both created and used by the package.
-//   -create if Y, then the table is created/reset. Default: Y.
-//   -dir directory with Fannie Mae text files.
-//   -tmp ClickHouse database to use for temporary tables.
-//   -concur # of concurrent processes to use in loading monthly files. Default: 1.
-//   -memory max memory usage by ClickHouse.  Default: 40000000000.
-//   -groupby max_bytes_before_external_groupby ClickHouse paramter. Default: 20000000000.
+//
+//	-host  ClickHouse IP address. Default: 127.0.0.1.
+//	-user  ClickHouse user. Default: default
+//	-password ClickHouse password for user. Default: <empty>.
+//	-table ClickHouse table in which to insert the data.
+//	-maptable.  Clickhouse table that maps pre-HARP loan ids to HARP ids.  This table is both created and used by the package.
+//	-create if Y, then the table is created/reset. Default: Y.
+//	-dir directory with Fannie Mae text files.
+//	-tmp ClickHouse database to use for temporary tables.
+//	-concur # of concurrent processes to use in loading monthly files. Default: 1.
+//	-memory max memory usage by ClickHouse.  Default: 40000000000.
+//	-groupby max_bytes_before_external_groupby ClickHouse paramter. Default: 20000000000.
 //
 // The non-standard loans have four additional fields.  This package recognizes whether the file is standard or not.
 // A combined table can be built by running the app twice pointing to the same -table.
@@ -139,11 +140,10 @@ func main() {
 		fmt.Printf("Done with %s. %d out of %d ,times: %0.2f, %0.2f minutes\n", fileName, ind+1, len(fileList), step1, step2)
 		step1Time += step1
 		step2Time += step2
-
 	}
 	step1Time /= 60.0
 	step2Time /= 60.0
-	fmt.Printf("step1 time: %0.2f step2 time: %0.2f hours, total: %0.2f", step1Time, step2Time, step1Time+step2Time)
+	fmt.Printf("step1 time: %0.2f step2 time: %0.2f hours, total: %0.2f\n", step1Time, step2Time, step1Time+step2Time)
 	// clean up
 	_, _ = con.Exec(fmt.Sprintf("DROP TABLE %s.source", *tmp))
 }
