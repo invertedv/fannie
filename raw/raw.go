@@ -684,8 +684,8 @@ func build(excl bool) *chutils.TableDef {
 		servActMiss = strMiss
 		servActLvl  = []string{"Y", "N"}
 
-		programMiss, programDef = strMiss, "N"
-		programLvl              = []string{"Y", "N"}
+		programMiss, programDef = strMiss, strMiss
+		programLvl              = []string{"F", "H", "R", "O", "7", "9"}
 
 		reloMiss = strMiss
 		reloLvl  = []string{"Y", "N"}
@@ -1486,11 +1486,10 @@ func build(excl bool) *chutils.TableDef {
 	}
 	fds[77] = fd
 
-	// compare to Freddie program
 	fd = &chutils.FieldDef{
 		Name:        "program",
 		ChSpec:      chutils.ChField{Base: chutils.ChFixedString, Length: 1},
-		Description: "fannie program: Y (home ready) N (no program), missing=" + programMiss,
+		Description: "fannie special eligibility program: F,H,R,O,7,9, missing=" + programMiss,
 		Legal:       &chutils.LegalValues{Levels: programLvl},
 		Missing:     programMiss,
 		Default:     programDef,

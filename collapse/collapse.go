@@ -109,7 +109,7 @@ GROUP BY lnId),
 r AS (
 SELECT
   lnId,
-  groupArray(month) AS month,
+  groupArray(toLastDayOfMonth(month)) AS month,
   groupArray(upb) AS upb,
   groupArray(dq) AS dq,
   groupArray(lower(servicer)) AS servicer,
